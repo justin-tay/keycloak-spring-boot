@@ -18,15 +18,15 @@ import java.util.function.Function;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.security.config.annotation.ObjectPostProcessor;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.DefaultLoginPageConfigurer;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.client.endpoint.DefaultAuthorizationCodeTokenResponseClient;
+import org.springframework.security.oauth2.client.endpoint.RestClientAuthorizationCodeTokenResponseClient;
 import org.springframework.security.oauth2.client.endpoint.NimbusJwtClientAuthenticationParametersConverter;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
-import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequestEntityConverter;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
@@ -45,7 +45,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.authentication.ui.DefaultLoginPageGeneratingFilter;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.KeySourceException;
@@ -54,7 +54,7 @@ import com.nimbusds.jose.jwk.JWKSelector;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyUse;
 import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.jwk.source.RemoteJWKSet;
+import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
@@ -94,14 +94,15 @@ public class WebSecurityConfiguration {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, JWKSet jwks,
 			ClientRegistrationRepository clientRegistrationRepository) throws Exception {
-		DefaultAuthorizationCodeTokenResponseClient accessTokenResponseClient = accessTokenResponseClient(jwks);
+		OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> accessTokenResponseClient = accessTokenResponseClient(
+				jwks);
 		return http
 			.authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
-				.requestMatchers(new AntPathRequestMatcher("/oauth2/jwks"))
+				.requestMatchers(PathPatternRequestMatcher.withDefaults().matcher("/oauth2/jwks"))
 				.anonymous())
-			.authorizeHttpRequests(
-					authorizeHttpRequests -> authorizeHttpRequests.requestMatchers(new AntPathRequestMatcher("/**"))
-						.authenticated())
+			.authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
+				.requestMatchers(PathPatternRequestMatcher.withDefaults().matcher("/**"))
+				.authenticated())
 			.oauth2Login(oauth2Login -> oauth2Login
 				.tokenEndpoint(tokenEndpoint -> tokenEndpoint.accessTokenResponseClient(accessTokenResponseClient))
 				.userInfoEndpoint(userInfoEndpoint -> userInfoEndpoint.oidcUserService(oidcUserService())))
@@ -161,7 +162,7 @@ public class WebSecurityConfiguration {
 	private JWKSource<SecurityContext> jwkSource(ClientRegistration clientRegistration) {
 		String jwkSetUri = clientRegistration.getProviderDetails().getJwkSetUri();
 		try {
-			return new RemoteJWKSet<SecurityContext>(new URL(jwkSetUri));
+			return JWKSourceBuilder.create(new URL(jwkSetUri)).retrying(true).build();
 		}
 		catch (MalformedURLException e) {
 			throw new IllegalArgumentException(e);
@@ -186,7 +187,8 @@ public class WebSecurityConfiguration {
 	 * @param jwks the JWKS
 	 * @return the access token response client
 	 */
-	private DefaultAuthorizationCodeTokenResponseClient accessTokenResponseClient(JWKSet jwks) {
+	private OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> accessTokenResponseClient(
+			JWKSet jwks) {
 		Function<ClientRegistration, JWK> jwkResolver = clientRegistration -> jwks.getKeys()
 			.stream()
 			.filter(jwk -> KeyUse.SIGNATURE.equals(jwk.getKeyUse()))
@@ -194,12 +196,8 @@ public class WebSecurityConfiguration {
 			.get();
 		NimbusJwtClientAuthenticationParametersConverter<OAuth2AuthorizationCodeGrantRequest> parametersConverter = new NimbusJwtClientAuthenticationParametersConverter<>(
 				jwkResolver);
-
-		OAuth2AuthorizationCodeGrantRequestEntityConverter authorizationCodeGrantRequestEntityConverter = new OAuth2AuthorizationCodeGrantRequestEntityConverter();
-		authorizationCodeGrantRequestEntityConverter.addParametersConverter(parametersConverter);
-
-		DefaultAuthorizationCodeTokenResponseClient accessTokenResponseClient = new DefaultAuthorizationCodeTokenResponseClient();
-		accessTokenResponseClient.setRequestEntityConverter(authorizationCodeGrantRequestEntityConverter);
+		RestClientAuthorizationCodeTokenResponseClient accessTokenResponseClient = new RestClientAuthorizationCodeTokenResponseClient();
+		accessTokenResponseClient.addParametersConverter(parametersConverter);
 		return accessTokenResponseClient;
 	}
 

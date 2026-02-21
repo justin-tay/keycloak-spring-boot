@@ -18,7 +18,7 @@ public class JwksController {
 		this.jwkset = jwkset;
 	}
 
-	@GetMapping(path = "/oauth2/jwks", produces = MediaType.APPLICATION_JSON_VALUE)
+	@GetMapping(path = "/oauth2/jwks", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.ALL_VALUE)
 	public String jwks() {
 		return this.jwkset.toString();
 	}
