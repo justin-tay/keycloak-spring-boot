@@ -1,0 +1,27 @@
+# Set default behavior to auto-detect text files and normalize to LF
+* text=auto eol=lf
+
+# Explicitly declare text files to always use LF
+*.java text eol=lf
+*.xml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.properties text eol=lf
+*.sh text eol=lf
+*.gitignore text eol=lf
+*.gitattributes text eol=lf
+mvnw text eol=lf
+
+# Declare binary files to prevent corruption
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.class binary
+*.zip binary
+*.war binary
