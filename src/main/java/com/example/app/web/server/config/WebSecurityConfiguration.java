@@ -27,6 +27,7 @@ import org.springframework.security.oauth2.client.endpoint.RestClientAuthorizati
 import org.springframework.security.oauth2.client.endpoint.NimbusJwtClientAuthenticationParametersConverter;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
+import org.springframework.security.oauth2.client.oidc.authentication.OidcIdTokenValidator;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
@@ -34,6 +35,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.ClaimAccessor;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -132,7 +134,7 @@ public class WebSecurityConfiguration {
 	JwtDecoderFactory<ClientRegistration> jwtDecoderFactory() {
 		/*
 		 * The default implementation is OidcIdTokenDecoderFactory but its customization
-		 * is limited.
+		 * is limited for instance if the id token needs to be decrypted.
 		 */
 		return clientRegistration -> {
 			return jwtDecoders.computeIfAbsent(clientRegistration.getRegistrationId(), key -> {
@@ -149,9 +151,20 @@ public class WebSecurityConfiguration {
 					}
 				});
 				jwtProcessor.setJWSKeySelector(jwsKeySelector);
-				return new NimbusJwtDecoder(jwtProcessor);
+				NimbusJwtDecoder jwtDecoder = new NimbusJwtDecoder(jwtProcessor);
+				jwtDecoder.setJwtValidator(oidcIdTokenValidator(clientRegistration));
+				return jwtDecoder;
 			});
 		};
+	}
+
+	/**
+	 * Gets the OpenID Connect validator for an ID token.
+	 * @param clientRegistration the client registration that received the ID token
+	 * @return the validator for required OpenID Connect ID token claims
+	 */
+	static OAuth2TokenValidator<Jwt> oidcIdTokenValidator(ClientRegistration clientRegistration) {
+		return JwtValidators.createDefaultWithValidators(List.of(new OidcIdTokenValidator(clientRegistration)));
 	}
 
 	/**
